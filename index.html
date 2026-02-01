@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Controle de Estoque - SaaS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root{
+  --azul:#0d6efd;
+  --preto:#111;
+  --cinza:#f4f6f8;
+  --branco:#fff;
+}
+
+*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+
+body{
+  margin:0;
+  background:var(--cinza);
+  color:#333;
+}
+
+header{
+  background:var(--preto);
+  color:var(--branco);
+  padding:20px;
+  text-align:center;
+}
+
+.container{
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+
+h2{
+  margin-top:40px;
+  color:var(--azul);
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:20px;
+}
+
+.card{
+  background:var(--branco);
+  padding:20px;
+  border-radius:8px;
+  box-shadow:0 4px 10px rgba(0,0,0,.08);
+}
+
+input,select,button{
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button{
+  background:var(--azul);
+  color:white;
+  border:none;
+  cursor:pointer;
+}
+
+button:hover{opacity:.9}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+
+th,td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
+  text-align:left;
+}
+
+.badge{
+  padding:4px 8px;
+  border-radius:4px;
+  color:white;
+  font-size:12px;
+}
+
+.low{background:red}
+.ok{background:green}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>SaaS – Controle de Estoque Simples</h1>
+  <p>Organização • Controle • Simplicidade</p>
+</header>
+
+<div class="container">
+
+<!-- DASHBOARD -->
+<h2>Dashboard</h2>
+<div class="grid">
+  <div class="card"><h3>Total de Produtos</h3><h1 id="totalProdutos">0</h1></div>
+  <div class="card"><h3>Total em Estoque</h3><h1 id="totalEstoque">0</h1></div>
+  <div class="card"><h3>Estoque Baixo</h3><h1 id="estoqueBaixo">0</h1></div>
+</div>
+
+<div class="grid">
+  <div class="card"><canvas id="graficoCategorias"></canvas></div>
+  <div class="card"><canvas id="graficoMovimentacoes"></canvas></div>
+</div>
+
+<!-- PRODUTOS -->
+<h2>Cadastro de Produtos</h2>
+<div class="card">
+  <input id="nome" placeholder="Nome do produto">
+  <input id="categoria" placeholder="Categoria">
+  <input id="quantidade" type="number" placeholder="Quantidade">
+  <input id="minimo" type="number" placeholder="Estoque mínimo">
+  <button onclick="addProduto()">Adicionar Produto</button>
+</div>
+
+<!-- FILTRO -->
+<h2>Estoque</h2>
+<div class="card">
+  <select id="filtroCategoria" onchange="renderProdutos()">
+    <option value="">Todas categorias</option>
+  </select>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Produto</th>
+        <th>Categoria</th>
+        <th>Qtd</th>
+        <th>Status</th>
+        <th>Ação</th>
+      </tr>
+    </thead>
+    <tbody id="listaProdutos"></tbody>
+  </table>
+</div>
+
+<!-- HISTÓRICO -->
+<h2>Histórico de Movimentações</h2>
+<div class="card">
+  <label>De:</label>
+  <input type="date" id="dataInicio">
+  <label>Até:</label>
+  <input type="date" id="dataFim">
+  <button onclick="renderHistorico()">Filtrar</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Produto</th>
+        <th>Tipo</th>
+        <th>Quantidade</th>
+      </tr>
+    </thead>
+    <tbody id="historico"></tbody>
+  </table>
+</div>
+
+</div>
+
+<script>
+let produtos = JSON.parse(localStorage.getItem('produtos')) || [];
+let historico = JSON.parse(localStorage.getItem('historico')) || [];
+
+function salvar(){
+  localStorage.setItem('produtos',JSON.stringify(produtos));
+  localStorage.setItem('historico',JSON.stringify(historico));
+  renderTudo();
+}
+
+function addProduto(){
+  produtos.push({
+    nome:nome.value,
+    categoria:categoria.value,
+    quantidade:+quantidade.value,
+    minimo:+minimo.value
+  });
+  historico.push({data:new Date(),produto:nome.value,tipo:'Entrada',qtd:+quantidade.value});
+  salvar();
+}
+
+function movimentar(i,tipo){
+  let qtd = prompt("Quantidade:");
+  if(!qtd) return;
+  qtd = +qtd;
+  produtos[i].quantidade += tipo==='Entrada'?qtd:-qtd;
+  historico.push({data:new Date(),produto:produtos[i].nome,tipo,qtd});
+  salvar();
+}
+
+function renderProdutos(){
+  listaProdutos.innerHTML='';
+  filtroCategoria.innerHTML='<option value="">Todas categorias</option>';
+  let cats=[...new Set(produtos.map(p=>p.categoria))];
+  cats.forEach(c=>filtroCategoria.innerHTML+=`<option>${c}</option>`);
+
+  produtos.filter(p=>!filtroCategoria.value||p.categoria===filtroCategoria.value)
+  .forEach((p,i)=>{
+    listaProdutos.innerHTML+=`
+    <tr>
+      <td>${p.nome}</td>
+      <td>${p.categoria}</td>
+      <td>${p.quantidade}</td>
+      <td><span class="badge ${p.quantidade<=p.minimo?'low':'ok'}">${p.quantidade<=p.minimo?'Baixo':'OK'}</span></td>
+      <td>
+        <button onclick="movimentar(${i},'Entrada')">+</button>
+        <button onclick="movimentar(${i},'Saída')">-</button>
+      </td>
+    </tr>`;
+  });
+}
+
+function renderHistorico(){
+  historicoEl.innerHTML='';
+  let ini=new Date(dataInicio.value||'1900-01-01');
+  let fim=new Date(dataFim.value||'2999-12-31');
+
+  historico.filter(h=>new Date(h.data)>=ini && new Date(h.data)<=fim)
+  .forEach(h=>{
+    historicoEl.innerHTML+=`
+    <tr>
+      <td>${new Date(h.data).toLocaleString()}</td>
+      <td>${h.produto}</td>
+      <td>${h.tipo}</td>
+      <td>${h.qtd}</td>
+    </tr>`;
+  });
+}
+
+function renderDashboard(){
+  totalProdutos.innerText=produtos.length;
+  totalEstoque.innerText=produtos.reduce((a,b)=>a+b.quantidade,0);
+  estoqueBaixo.innerText=produtos.filter(p=>p.quantidade<=p.minimo).length;
+
+  let catCount={}
+  produtos.forEach(p=>catCount[p.categoria]=(catCount[p.categoria]||0)+p.quantidade);
+
+  new Chart(graficoCategorias,{type:'pie',data:{labels:Object.keys(catCount),datasets:[{data:Object.values(catCount)}]}});
+
+  let ent=historico.filter(h=>h.tipo==='Entrada').length;
+  let sai=historico.filter(h=>h.tipo==='Saída').length;
+
+  new Chart(graficoMovimentacoes,{type:'bar',data:{labels:['Entradas','Saídas'],datasets:[{data:[ent,sai]}]}})
+}
+
+function renderTudo(){
+  renderProdutos();
+  renderHistorico();
+  renderDashboard();
+}
+
+renderTudo();
+</script>
+
+</body>
+</html>
